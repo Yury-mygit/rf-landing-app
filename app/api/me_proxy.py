@@ -227,3 +227,13 @@ async def me_users_create(request: Request) -> Response:
 @router.post("/users/{user_id}/setpw")
 async def me_users_setpw(user_id: int, request: Request) -> Response:
     return await _post_action(f"/users/{user_id}/setpw", request)
+
+
+@router.post("/users/{user_id}/promote-curator")
+async def me_users_promote_curator(user_id: int, request: Request) -> Response:
+    return await _post_action(f"/users/{user_id}/promote-curator", request)
+
+
+@router.post("/users/{user_id}/demote-curator")
+async def me_users_demote_curator(user_id: int, request: Request) -> Response:
+    return await _post_action(f"/users/{user_id}/demote-curator", request)
