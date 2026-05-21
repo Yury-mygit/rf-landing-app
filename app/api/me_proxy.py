@@ -34,10 +34,28 @@ _MAIN_RE = re.compile(r"<main[^>]*>(.*?)</main>", re.DOTALL)
 _ACTION_REWRITE = re.compile(
     r'action="(/(?:logout|tokens|sessions|deploy-permits|users)([^"]*))"'
 )
+_HREF_ME_REWRITE = re.compile(r'href="/me(#[^"]*)?"')
 
 
 def _rewrite_actions(html: str) -> str:
     return _ACTION_REWRITE.sub(r'action="/me\1"', html)
+
+
+def _rewrite_me_hrefs(html: str) -> str:
+    return _HREF_ME_REWRITE.sub(lambda m: f'href="/me/{m.group(1) or ""}"', html)
+
+
+def _wrap_user_page(auth_html: str) -> str:
+    m = _MAIN_RE.search(auth_html)
+    inner = m.group(1) if m else auth_html
+    inner = _rewrite_actions(inner)
+    inner = _rewrite_me_hrefs(inner)
+    return _USER_LAYOUT.format(
+        topnav=_topnav("", "profile"),
+        tabs=_external_tabs("user"),
+        tabs_css=_TABS_CSS,
+        body=inner,
+    )
 
 
 def _external_tabs(active: str) -> str:
@@ -159,16 +177,7 @@ async def me_page(request: Request, tab: str = Query(default="user")) -> Respons
 
     ctype = (r.headers.get("content-type") or "").lower()
     if r.status_code == 200 and "text/html" in ctype:
-        m = _MAIN_RE.search(r.text)
-        inner = m.group(1) if m else r.text
-        inner = _rewrite_actions(inner)
-        full = _USER_LAYOUT.format(
-            topnav=_topnav("", "profile"),
-            tabs=_external_tabs("user"),
-            tabs_css=_TABS_CSS,
-            body=inner,
-        )
-        resp = HTMLResponse(content=full)
+        resp = HTMLResponse(content=_wrap_user_page(r.text))
         _propagate(r, resp)
         return resp
 
@@ -183,6 +192,11 @@ async def _post_action(auth_path: str, request: Request) -> Response:
     ct = request.headers.get("content-type", "application/x-www-form-urlencoded")
     async with httpx.AsyncClient(**_client_kwargs(request)) as client:
         r = await client.post(auth_path, content=body, headers={"content-type": ct})
+    ctype = (r.headers.get("content-type") or "").lower()
+    if r.status_code == 200 and "text/html" in ctype:
+        resp = HTMLResponse(content=_wrap_user_page(r.text))
+        _propagate(r, resp)
+        return resp
     resp = Response(content=r.content, status_code=r.status_code,
                     media_type=r.headers.get("content-type"))
     _propagate(r, resp)
