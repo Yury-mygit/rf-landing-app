@@ -182,7 +182,7 @@ def _prefix(request: Request) -> str:
 def _topnav(prefix: str, active: str) -> str:
     home_href = "/" if prefix else "https://raftforge.art/"
     tools_href = "/tools/" if prefix else "https://raftforge.art/tools/"
-    projects_href = f"{prefix}" if prefix else "/"
+    projects_href = f"{prefix}" if prefix else "https://raftforge.art/projects"
     profile_href = "/me/" if prefix else "https://raftforge.art/me/"
     items = [
         ("home", "Главная", home_href),
