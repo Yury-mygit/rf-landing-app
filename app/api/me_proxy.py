@@ -18,17 +18,16 @@ import re
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, Response
 
-from app.api.landing import _LAYOUT, _STYLE_CSS, _topnav
+from app.api.landing import _FAVICON_LINK, _LAYOUT, _PERMS_WATCH_JS, _STYLE_CSS, _topnav
 
 
 router = APIRouter(prefix="/me", tags=["me-proxy"])
 
 AUTH_BASE_URL = "http://auth:8014"
 AUTH_HOST_HEADER = "auth.raftforge.art"
-RCU_URL = "https://rcu.raftforge.art/"
 
 _MAIN_RE = re.compile(r"<main[^>]*>(.*?)</main>", re.DOTALL)
 _ACTION_REWRITE = re.compile(
@@ -52,25 +51,9 @@ def _wrap_user_page(auth_html: str) -> str:
     inner = _rewrite_me_hrefs(inner)
     return _USER_LAYOUT.format(
         topnav=_topnav("", "profile"),
-        tabs=_external_tabs("user"),
-        tabs_css=_TABS_CSS,
         body=inner,
     )
 
-
-def _external_tabs(active: str) -> str:
-    items = (("user", "Пользователь"), ("server", "Сервер"))
-    parts = []
-    for key, label in items:
-        cls = "tab active" if key == active else "tab"
-        parts.append(f'<a href="/me/?tab={key}" class="{cls}">{label}</a>')
-    return f'<nav class="tabs ext-tabs">{"".join(parts)}</nav>'
-
-
-_TABS_CSS = (
-    ".ext-tabs-wrap{padding:0 24px;border-bottom:1px solid var(--border)}"
-    ".ext-tabs-wrap nav.tabs{margin:0;border-bottom:0}"
-)
 
 _USER_LAYOUT = """\
 <!doctype html>
@@ -80,38 +63,15 @@ _USER_LAYOUT = """\
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Кабинет — RaftForge</title>
 <link rel="stylesheet" href="/me/static/style.css">
+""" + _FAVICON_LINK + """
 <style>
-{tabs_css}
-main.page{{padding-top:24px}}
+main.page{{max-width:none;padding:24px}}
 </style>
 </head>
 <body>
 {topnav}
-<div class="ext-tabs-wrap">{tabs}</div>
 <main class="page">{body}</main>
-</body>
-</html>
-"""
-
-_SERVER_LAYOUT = """\
-<!doctype html>
-<html lang="ru">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Кабинет — Сервер — RaftForge</title>
-<link rel="stylesheet" href="/me/static/style.css">
-<style>
-:root{{--ext-bar-h:96px}}
-body{{margin:0;overflow:hidden}}
-{tabs_css}
-iframe.rcu{{display:block;width:100%;height:calc(100vh - var(--ext-bar-h));border:0;background:var(--bg)}}
-</style>
-</head>
-<body>
-{topnav}
-<div class="ext-tabs-wrap">{tabs}</div>
-<iframe class="rcu" src="{rcu_url}" title="rcu — control plane"></iframe>
+""" + _PERMS_WATCH_JS + """\
 </body>
 </html>
 """
@@ -162,16 +122,7 @@ async def me_style() -> Response:
 
 
 @router.get("/", response_class=HTMLResponse)
-async def me_page(request: Request, tab: str = Query(default="user")) -> Response:
-    if tab == "server":
-        full = _SERVER_LAYOUT.format(
-            topnav=_topnav("", "profile"),
-            tabs=_external_tabs("server"),
-            tabs_css=_TABS_CSS,
-            rcu_url=RCU_URL,
-        )
-        return HTMLResponse(content=full)
-
+async def me_page(request: Request) -> Response:
     async with httpx.AsyncClient(**_client_kwargs(request)) as client:
         r = await client.get("/me")
 
@@ -251,3 +202,13 @@ async def me_users_promote_curator(user_id: int, request: Request) -> Response:
 @router.post("/users/{user_id}/demote-curator")
 async def me_users_demote_curator(user_id: int, request: Request) -> Response:
     return await _post_action(f"/users/{user_id}/demote-curator", request)
+
+
+@router.post("/users/{user_id}/grant")
+async def me_users_grant(user_id: int, request: Request) -> Response:
+    return await _post_action(f"/users/{user_id}/grant", request)
+
+
+@router.post("/users/{user_id}/revoke")
+async def me_users_revoke(user_id: int, request: Request) -> Response:
+    return await _post_action(f"/users/{user_id}/revoke", request)

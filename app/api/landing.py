@@ -27,6 +27,59 @@ from app.services.markdown import render_md
 router = APIRouter(prefix="/site", tags=["landing"])
 
 
+# NB: фигурные скобки удвоены — этот snippet встраивается в строки,
+# которые потом проходят через `.format(...)`. После format → одинарные.
+_PERMS_WATCH_JS = """\
+<script>
+(function(){{
+  var lastVersion = null;
+  var inflight = false;
+  function applyNav(d){{
+    document.querySelectorAll("[data-nav]").forEach(function(el){{
+      var key = el.getAttribute("data-nav");
+      var visible = false;
+      if (key === "profile") visible = !!(d && d.authenticated);
+      else visible = !!(d && d.nav && d.nav[key]);
+      if (visible) el.removeAttribute("hidden");
+      else el.setAttribute("hidden", "");
+    }});
+  }}
+  function check(){{
+    if (inflight) return;
+    inflight = true;
+    fetch("/auth/whoami", {{ credentials: "include", cache: "no-store" }})
+      .then(function(r){{ return r.ok ? r.json() : null; }})
+      .then(function(d){{
+        inflight = false;
+        if (!d) return;
+        if (lastVersion !== null && d.version !== lastVersion) {{
+          location.reload();
+        }} else {{
+          lastVersion = d.version;
+          applyNav(d);
+        }}
+      }})
+      .catch(function(){{ inflight = false; }});
+  }}
+  check();
+  document.addEventListener("click", check, true);
+  document.addEventListener("submit", check, true);
+  document.addEventListener("visibilitychange", function(){{
+    if (document.visibilityState === "visible") check();
+  }});
+}})();
+</script>
+"""
+
+
+_FAVICON_LINK = (
+    '<link rel="icon" href="data:image/svg+xml,'
+    "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'"
+    "%3E%3Ctext y='.9em' font-size='90'"
+    "%3E%E2%9A%92%EF%B8%8F%3C/text%3E%3C/svg%3E\">"
+)
+
+
 _LAYOUT = """\
 <!doctype html>
 <html lang="ru">
@@ -35,11 +88,12 @@ _LAYOUT = """\
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title}</title>
 <link rel="stylesheet" href="{css_href}">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9A%92%EF%B8%8F%3C/text%3E%3C/svg%3E">
+""" + _FAVICON_LINK + """
 </head>
 <body>
 {topnav}
 <main class="page">{body}</main>
+""" + _PERMS_WATCH_JS + """\
 </body>
 </html>
 """
@@ -184,22 +238,30 @@ def _topnav(prefix: str, active: str) -> str:
     tools_href = "/tools/" if prefix else "https://raftforge.art/tools/"
     projects_href = f"{prefix}" if prefix else "https://raftforge.art/projects"
     profile_href = "/me/" if prefix else "https://raftforge.art/me/"
+    system_href = "/system/" if prefix else "https://raftforge.art/system/"
+    # nav-key соответствует ключу в whoami.nav (tools/projects/system).
+    # JS на фронтенде скрывает табы по этим data-nav-атрибутам.
     items = [
-        ("home", "Главная", home_href),
-        ("tools", "Инструменты", tools_href),
-        ("projects", "Проекты", projects_href),
-        ("profile", "Кабинет", profile_href),
+        ("home", "Главная", home_href, None),
+        ("tools", "Инструменты", tools_href, "tools"),
+        ("projects", "Проекты", projects_href, "projects"),
+        ("system", "Система", system_href, "system"),
+        ("profile", "Кабинет", profile_href, "profile"),
     ]
-    links = "".join(
-        f'<a href="{href}"{" class=\"active\"" if key == active else ""}>{label}</a>'
-        for key, label, href in items
-    )
+    parts = []
+    for key, label, href, nav_key in items:
+        attrs = ""
+        if key == active:
+            attrs += ' class="active"'
+        if nav_key:
+            attrs += f' data-nav="{nav_key}" hidden'
+        parts.append(f'<a href="{href}"{attrs}>{label}</a>')
     return (
         '<nav class="topnav">'
         f'<a class="brand-link" href="{home_href}">'
         '<span class="topnav-logo">R</span><span>RaftForge</span>'
         "</a>"
-        f'<div class="nav-links">{links}</div>'
+        f'<div class="nav-links">{"".join(parts)}</div>'
         "</nav>"
     )
 
