@@ -43,6 +43,15 @@ _PERMS_WATCH_JS = """\
       if (visible) el.removeAttribute("hidden");
       else el.setAttribute("hidden", "");
     }});
+    var btn = document.getElementById("login-btn");
+    if (btn) {{
+      if (d && d.authenticated) {{
+        btn.setAttribute("hidden", "");
+      }} else {{
+        btn.removeAttribute("hidden");
+        btn.href = "https://auth.raftforge.art/login?next=" + encodeURIComponent(location.href);
+      }}
+    }}
   }}
   function check(){{
     if (inflight) return;
@@ -109,11 +118,14 @@ a:hover{text-decoration:underline}
 .topnav .brand-link{display:flex;align-items:center;gap:10px;color:var(--fg);font-weight:600;font-size:17px;text-decoration:none;margin-right:auto}
 .topnav .brand-link:hover{text-decoration:none}
 .topnav .topnav-logo{width:28px;height:28px;border-radius:6px;background:linear-gradient(135deg,var(--accent),#c2410c);display:grid;place-items:center;color:#fff;font-weight:700;font-size:15px}
-.topnav .nav-links{display:flex;gap:6px}
-.topnav .nav-links a{color:var(--muted);text-decoration:none;padding:6px 14px;border-radius:6px;font-size:15px}
+.topnav .nav-links{display:flex;gap:6px;flex-wrap:nowrap}
+.topnav .nav-links a{color:var(--muted);text-decoration:none;padding:6px 14px;border-radius:6px;font-size:15px;display:inline-flex;align-items:center;gap:6px}
+.topnav .nav-links a svg,.topnav .login-btn svg{width:18px;height:18px;flex-shrink:0}
 .topnav .nav-links a:hover{color:var(--fg);background:rgba(255,255,255,0.04);text-decoration:none}
 .topnav .nav-links a.active{color:var(--accent);background:rgba(255,106,61,0.10)}
-@media(max-width:600px){.topnav{padding:12px 16px;gap:12px}.topnav .brand-link span:not(.topnav-logo){display:none}.topnav .nav-links a{padding:6px 10px;font-size:14px}}
+.topnav .login-btn{display:inline-flex;align-items:center;gap:6px;color:var(--accent);border:1px solid var(--accent);padding:5px 14px;border-radius:6px;text-decoration:none;font-size:14px;margin-left:12px}
+.topnav .login-btn:hover{background:rgba(255,106,61,0.10);text-decoration:none}
+@media(max-width:600px){.topnav{padding:12px 12px;gap:10px}.topnav .brand-link span:not(.topnav-logo){display:none}.topnav .nav-links a{padding:8px;gap:0}.topnav .nav-links a span,.topnav .login-btn span{display:none}.topnav .login-btn{padding:6px 8px}}
 
 .page{max-width:920px;margin:0 auto;padding:48px 24px}
 h1,h2,h3{line-height:1.25;margin:1.4em 0 .5em}
@@ -233,14 +245,26 @@ def _prefix(request: Request) -> str:
     return p
 
 
+_NAV_ICONS = {
+    "home": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>',
+    "tools": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m14.7 6.3 3 3-2 2-3-3a4 4 0 0 1 5-5l-3 3 2 2 3-3a4 4 0 0 0-5-5z"/><path d="m6.4 16.6 8.3-8.3-2.8-2.8L5 12.5"/><path d="M5 12.5a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2"/></svg>',
+    "projects": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg>',
+    "system": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="1"/><rect x="3" y="13" width="18" height="7" rx="1"/><circle cx="7" cy="7.5" r="0.6" fill="currentColor" stroke="none"/><circle cx="7" cy="16.5" r="0.6" fill="currentColor" stroke="none"/></svg>',
+    "profile": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
+    "login": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/></svg>',
+}
+
+
 def _topnav(prefix: str, active: str) -> str:
     home_href = "/" if prefix else "https://raftforge.art/"
     tools_href = "/tools/" if prefix else "https://raftforge.art/tools/"
     projects_href = f"{prefix}" if prefix else "https://raftforge.art/projects"
     profile_href = "/me/" if prefix else "https://raftforge.art/me/"
     system_href = "/system/" if prefix else "https://raftforge.art/system/"
+    login_href = "https://auth.raftforge.art/login"
     # nav-key соответствует ключу в whoami.nav (tools/projects/system).
-    # JS на фронтенде скрывает табы по этим data-nav-атрибутам.
+    # JS на фронтенде скрывает табы по этим data-nav-атрибутам;
+    # login-btn инвертирован — виден только незалогиненным.
     items = [
         ("home", "Главная", home_href, None),
         ("tools", "Инструменты", tools_href, "tools"),
@@ -250,18 +274,22 @@ def _topnav(prefix: str, active: str) -> str:
     ]
     parts = []
     for key, label, href, nav_key in items:
-        attrs = ""
+        attrs = f' title="{label}" aria-label="{label}"'
         if key == active:
             attrs += ' class="active"'
         if nav_key:
             attrs += f' data-nav="{nav_key}" hidden'
-        parts.append(f'<a href="{href}"{attrs}>{label}</a>')
+        icon = _NAV_ICONS[key]
+        parts.append(f'<a href="{href}"{attrs}>{icon}<span>{label}</span></a>')
+    login_icon = _NAV_ICONS["login"]
     return (
         '<nav class="topnav">'
         f'<a class="brand-link" href="{home_href}">'
         '<span class="topnav-logo">R</span><span>RaftForge</span>'
         "</a>"
         f'<div class="nav-links">{"".join(parts)}</div>'
+        f'<a class="login-btn" id="login-btn" href="{login_href}" hidden '
+        f'title="Войти" aria-label="Войти">{login_icon}<span>Войти</span></a>'
         "</nav>"
     )
 
