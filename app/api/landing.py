@@ -43,6 +43,18 @@ _PERMS_WATCH_JS = """\
       if (visible) el.removeAttribute("hidden");
       else el.setAttribute("hidden", "");
     }});
+    // data-perm="resource:minLevel" — показать только если у user есть
+    // нужный уровень. Куратор видит всё.
+    document.querySelectorAll("[data-perm]").forEach(function(el){{
+      var spec = el.getAttribute("data-perm") || "";
+      var parts = spec.split(":");
+      var resource = parts[0];
+      var min = parseInt(parts[1] || "200", 10);
+      var have = (d && d.levels && d.levels[resource]) || 0;
+      var visible = !!(d && (d.is_curator || have >= min));
+      if (visible) el.removeAttribute("hidden");
+      else el.setAttribute("hidden", "");
+    }});
     var btn = document.getElementById("login-btn");
     if (btn) {{
       if (d && d.authenticated) {{
@@ -150,6 +162,8 @@ th{background:var(--card)}
 .tile:hover{transform:translateY(-2px);border-color:var(--accent);text-decoration:none}
 .avatar{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:#fff;letter-spacing:-1px}
 .tile-title{color:var(--fg);font-weight:600;font-size:15px;text-align:center}
+.tile-cta{display:inline-block;padding:10px 18px;background:var(--accent);color:#000;border-radius:8px;font-weight:600;text-decoration:none}
+.tile-cta:hover{filter:brightness(1.1);text-decoration:none}
 
 .empty{color:var(--muted);text-align:center;padding:48px 0}
 
@@ -323,12 +337,31 @@ async def landing_index(request: Request) -> HTMLResponse:
     prefix = _prefix(request)
     css_href = f"{prefix}/static/style.css" if prefix else "/site/static/style.css"
 
+    # Route Agent tile — скрыт до тех пор пока _PERMS_WATCH_JS не подтвердит,
+    # что у user'а есть route:200 (или is_curator). См. карту
+    # 2026-06-07-route-auth-tokens-migration.
+    route_tile = (
+        '<section data-perm="route:200" hidden style="margin-top:2em">'
+        '  <h2>Route — Android-каталог</h2>'
+        '  <p>Установи route-agent на телефон или планшет — каталог наших '
+        '  Android-приложений с авто-обновлениями и сбором crash-логов.</p>'
+        '  <p>'
+        '    <a class="tile-cta" href="https://route.raftforge.art/agent.apk">Скачать APK</a>'
+        '  </p>'
+        '  <p style="color:var(--muted);font-size:14px">'
+        '    После установки открой Settings агента и вставь identity-токен '
+        '    из <a href="https://auth.raftforge.art/me/#tokens">/me/#tokens</a>.'
+        '  </p>'
+        '</section>'
+    )
+
     if not projects:
         body = (
             "<h1>Проекты</h1>"
             '<p class="lead">Витрина проектов пока пуста.</p>'
             '<div class="empty">Здесь появятся карточки проектов с <code>kind=project_root</code>, '
             "у которых есть <code>website_base</code> и заполнен <code>slug</code>.</div>"
+            + route_tile
         )
     else:
         tiles = []
@@ -348,6 +381,7 @@ async def landing_index(request: Request) -> HTMLResponse:
             "<h1>Проекты</h1>"
             '<p class="lead">Личная мастерская проектов и сервисов.</p>'
             f'<div class="tiles">{"".join(tiles)}</div>'
+            + route_tile
         )
 
     return HTMLResponse(
